@@ -535,8 +535,7 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)}</p>
-          <p>Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)}      Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
