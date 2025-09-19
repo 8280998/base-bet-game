@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
 import './App.css'; // Import the CSS for styling
@@ -131,7 +131,7 @@ const App = () => {
   const [contractBalance, setContractBalance] = useState(0);
   const [logs, setLogs] = useState([]);
   const [isBetting, setIsBetting] = useState(false);
-  const [stopRequested, setStopRequested] = useState(false);
+  const stopRequestedRef = useRef(false);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
 
@@ -330,7 +330,7 @@ const App = () => {
 
       const tx = await claimContract.claim({ gasLimit });
       addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);  // 2 blocks
+      const receipt = await tx.wait(2);
       addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
       
       // Force balance update after claim with delay for RPC sync
@@ -379,13 +379,30 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);  // 2 blocks
+        await tx.wait(2);
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
       addLog({type: 'simple', message: `Approval failed: ${error.message}`});
       throw error;
     }
+  };
+
+  const betIteration = async (contract, tokenContract, i) => {
+    if (stopRequestedRef.current) {
+      addLog({type: 'simple', message: 'Betting stopped by user.'});
+      return false;
+    }
+
+    const currentGuess = mode === '1' ? guess : '0123456789abcdef'.charAt(Math.floor(Math.random() * 16));
+    addLog({type: 'simple', message: `Attempting bet ${i+1}/${numBets} with guess ${currentGuess}`});
+    const { betId } = await placeBet(contract, currentGuess);
+    await new Promise(resolve => setTimeout(resolve, BLOCK_WAIT_TIME * 1000));
+    await resolveBet(contract, betId);
+    await new Promise(resolve => setTimeout(resolve, COOLDOWN * 1000));
+    updateBalance();
+    updateContractBalance();
+    return true;
   };
 
   const placeBet = async (contract, currentGuess, retryCount = 0) => {
@@ -414,7 +431,7 @@ const App = () => {
     } catch (error) {
       if (error.message.includes('Insufficient allowance') && retryCount < 1) {
         addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
-        await new Promise(resolve => setTimeout(resolve, 2000));  // 2s
+        await new Promise(resolve => setTimeout(resolve, 2000));
         return placeBet(contract, currentGuess, retryCount + 1);
       }
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
@@ -457,14 +474,14 @@ const App = () => {
       return;
     }
     setIsBetting(true);
-    setStopRequested(false);
+    stopRequestedRef.current = false;
     try {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
       await approveToken(CONTRACT_ADDRESS, tokenContract);
 
       await new Promise(resolve => setTimeout(resolve, 3000));
-      addLog({type: 'simple', message: 'Waiting for allowance sync...'});
+      addLog({type: 'simple', message: 'Waiting for allowance sync...'});  // 可选日志，显示等待中
 
       const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
@@ -475,25 +492,22 @@ const App = () => {
       }
 
       for (let i = 0; i < numBets; i++) {
-        if (stopRequested) break;
-        const currentGuess = mode === '1' ? guess : '0123456789abcdef'.charAt(Math.floor(Math.random() * 16));
-        addLog({type: 'simple', message: `Attempting bet ${i+1}/${numBets} with guess ${currentGuess}`});
-        const { betId } = await placeBet(contract, currentGuess);
-        await new Promise(resolve => setTimeout(resolve, BLOCK_WAIT_TIME * 1000));
-        await resolveBet(contract, betId);
-        await new Promise(resolve => setTimeout(resolve, COOLDOWN * 1000));
-        updateBalance();
-        updateContractBalance();
+        if (stopRequestedRef.current) {
+          addLog({type: 'simple', message: 'Betting stopped by user.'});
+          break;
+        }
+        await betIteration(contract, tokenContract, i);
       }
     } catch (error) {
       addLog({type: 'simple', message: `Betting process error: ${error.message}`});
     } finally {
       setIsBetting(false);
+      stopRequestedRef.current = false;
     }
   };
 
   const stopBetting = () => {
-    setStopRequested(true);
+    stopRequestedRef.current = true;
     addLog({type: 'simple', message: "Stopping betting..."});
   };
 
