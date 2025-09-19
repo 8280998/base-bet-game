@@ -481,7 +481,7 @@ const App = () => {
       await approveToken(CONTRACT_ADDRESS, tokenContract);
 
       await new Promise(resolve => setTimeout(resolve, 3000));
-      addLog({type: 'simple', message: 'Waiting for allowance sync...'});  // 可选日志，显示等待中
+      addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
       const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
