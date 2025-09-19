@@ -168,10 +168,25 @@ const App = () => {
       }
     };
 
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length > 0) {
+        setAccount(accounts[0]);
+        updateBalance();
+      } else {
+        setAccount(null);
+        setSigner(null);
+        setProvider(null);
+        setBalance(0);
+        addLog({type: 'simple', message: "Wallet disconnected."});
+      }
+    };
+
     provider.provider.on('chainChanged', handleChainChanged);
+    provider.provider.on('accountsChanged', handleAccountsChanged);
 
     return () => {
       provider.provider.removeListener('chainChanged', handleChainChanged);
+      provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
   }, [provider, account]);
 
@@ -250,8 +265,8 @@ const App = () => {
         }
 
         if (switchSuccess) {
-          // Add a short delay to allow the wallet to update
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Add a longer delay to allow the wallet to fully update after switch
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
         const updatedNetwork = await newProvider.getNetwork();
@@ -270,6 +285,13 @@ const App = () => {
       setSigner(newSigner);
       setAccount(accounts[0]);
       addLog({type: 'simple', message: `Connected with ${walletName}: ${accounts[0]}`});
+
+      // Force balance update after state settles
+      setTimeout(() => {
+        if (provider && account) {
+          updateBalance();
+        }
+      }, 1000);
     } catch (error) {
       addLog({type: 'simple', message: `Connection failed: ${error.message}`});
     }
@@ -336,7 +358,7 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait();
+        await tx.wait(2);
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
@@ -345,7 +367,7 @@ const App = () => {
     }
   };
 
-  const placeBet = async (contract, currentGuess) => {
+  const placeBet = async (contract, currentGuess, retryCount = 0) => {
     try {
       const amountWei = ethers.parseEther(betAmount.toString());
 
@@ -369,6 +391,11 @@ const App = () => {
       addLog({type: 'betPlaced', betId: betId.toString(), blockNumber: receipt.blockNumber});
       return { receipt, txHash: tx.hash, betId: betId.toString() };
     } catch (error) {
+      if (error.message.includes('Insufficient allowance') && retryCount < 1) {
+        addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
+        await new Promise(resolve => setTimeout(resolve, 2000));  // 2s
+        return placeBet(contract, currentGuess, retryCount + 1);
+      }
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
       throw error;
     }
@@ -414,6 +441,17 @@ const App = () => {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
       await approveToken(CONTRACT_ADDRESS, tokenContract);
+
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      addLog({type: 'simple', message: 'Waiting for allowance sync...'});
+
+      const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
+      const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
+      if (newAllowance < required) {
+        addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
+        await approveToken(CONTRACT_ADDRESS, tokenContract);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
       for (let i = 0; i < numBets; i++) {
         if (stopRequested) break;
