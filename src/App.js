@@ -128,6 +128,7 @@ const App = () => {
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
   const [balance, setBalance] = useState(0);
+  const [contractBalance, setContractBalance] = useState(0);
   const [logs, setLogs] = useState([]);
   const [isBetting, setIsBetting] = useState(false);
   const [stopRequested, setStopRequested] = useState(false);
@@ -150,6 +151,7 @@ const App = () => {
   useEffect(() => {
     if (account && provider) {
       updateBalance();
+      updateContractBalance();
     }
   }, [account, provider]);
 
@@ -162,6 +164,7 @@ const App = () => {
         addLog({type: 'simple', message: "Network switched to Base."});
         if (account) {
           updateBalance();
+          updateContractBalance();
         }
       } else {
         addLog({type: 'simple', message: "Switched to a different network. Please switch back to Base."});
@@ -172,11 +175,13 @@ const App = () => {
       if (accounts.length > 0) {
         setAccount(accounts[0]);
         updateBalance();
+        updateContractBalance();
       } else {
         setAccount(null);
         setSigner(null);
         setProvider(null);
         setBalance(0);
+        setContractBalance(0);
         addLog({type: 'simple', message: "Wallet disconnected."});
       }
     };
@@ -290,6 +295,7 @@ const App = () => {
       setTimeout(() => {
         if (provider && account) {
           updateBalance();
+          updateContractBalance();
         }
       }, 1000);
     } catch (error) {
@@ -324,9 +330,14 @@ const App = () => {
 
       const tx = await claimContract.claim({ gasLimit });
       addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait();
+      const receipt = await tx.wait(2);  // 2 blocks
       addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
-      updateBalance();
+      
+      // Force balance update after claim with delay for RPC sync
+      setTimeout(() => {
+        updateBalance();
+        updateContractBalance();
+      }, 2000);
     } catch (error) {
       addLog({type: 'simple', message: `Claim failed: ${error.message}`});
       if (error.reason) {
@@ -348,6 +359,16 @@ const App = () => {
     }
   };
 
+  const updateContractBalance = async () => {
+    try {
+      const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, provider);
+      const bal = await tokenContract.balanceOf(CONTRACT_ADDRESS);
+      setContractBalance(ethers.formatEther(bal));
+    } catch (error) {
+      addLog({type: 'simple', message: `Failed to fetch contract balance: ${error.message}`});
+    }
+  };
+
   const approveToken = async (contractAddr, tokenContract) => {
     try {
       const allowance = await tokenContract.allowance(account, contractAddr);
@@ -358,7 +379,7 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);
+        await tx.wait(2);  // 2 blocks
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
@@ -462,6 +483,7 @@ const App = () => {
         await resolveBet(contract, betId);
         await new Promise(resolve => setTimeout(resolve, COOLDOWN * 1000));
         updateBalance();
+        updateContractBalance();
       }
     } catch (error) {
       addLog({type: 'simple', message: `Betting process error: ${error.message}`});
@@ -510,6 +532,9 @@ const App = () => {
         <button className="claim-btn" onClick={claimTokens}>
           Claim Tokens
         </button>
+        <div className="vault-info">
+          Vault: {contractBalance} GTK
+        </div>
       </div>
       <Modal
         isOpen={modalIsOpen}
