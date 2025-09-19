@@ -541,7 +541,6 @@ const App = () => {
     <div className="app-container">
       <header className="app-header">
         <h1>Base Betting Game</h1>
-        <p className="subtitle">Bet on the blockchain – Win big or go home!</p>
         <p className="visitor-count">Welcome, you are the {visitorCount}th visitor</p>
       </header>
       <div className="wallet-buttons">
