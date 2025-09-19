@@ -46,6 +46,8 @@
 .button-group {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 10px;
 }
 
 .instructions-btn {
@@ -209,7 +211,7 @@ select, .input-field {
 
 .modal-content {
   position: relative;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #667eea 0%, #4a90e2 100%);
   padding: 30px;
   border-radius: 15px;
   max-width: 500px;
@@ -279,6 +281,19 @@ select, .input-field {
   text-decoration: underline;
 }
 
+.vault-info {
+  margin-left: 20px;
+  font-size: 1em;
+  color: white;
+  font-weight: bold;
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  padding: 12px 24px;
+  border-radius: 25px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+}
+
 /* Responsive for mobile */
 @media (max-width: 600px) {
   .app-container {
@@ -314,5 +329,11 @@ select, .input-field {
   .input-row {
     flex-direction: column;
     gap: 15px;
+  }
+
+  .vault-info {
+    margin-left: 10px;
+    padding: 10px 20px;
+    font-size: 0.9em;
   }
 }
