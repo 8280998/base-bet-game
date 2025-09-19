@@ -59,10 +59,7 @@
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
-  border-top-left-radius: 50px;
-  border-bottom-left-radius: 50px;
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  border-radius: 25px;
 }
 
 .claim-btn {
@@ -74,10 +71,7 @@
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-top-right-radius: 50px;
-  border-bottom-right-radius: 50px;
+  border-radius: 25px;
 }
 
 .instructions-btn:hover, .claim-btn:hover {
@@ -282,7 +276,6 @@ select, .input-field {
 }
 
 .vault-info {
-  margin-left: 20px;
   font-size: 1em;
   color: white;
   font-weight: bold;
@@ -292,6 +285,11 @@ select, .input-field {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
+  transition: box-shadow 0.2s;
+}
+
+.vault-info:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* Responsive for mobile */
@@ -324,6 +322,8 @@ select, .input-field {
   .button-group {
     flex-direction: row;
     justify-content: center;
+    gap: 5px;
+    flex-wrap: wrap;
   }
 
   .input-row {
@@ -332,7 +332,6 @@ select, .input-field {
   }
 
   .vault-info {
-    margin-left: 10px;
     padding: 10px 20px;
     font-size: 0.9em;
   }
