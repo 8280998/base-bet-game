@@ -447,7 +447,7 @@ const App = () => {
   const resolveBet = async (contract, betId, retryCount = 0) => {
     try {
       const bet = await contract.getBet(BigInt(betId));
-      const betBlock = Number(bet[4]);  // bet blockNumber
+      const betBlock = Number(bet[6]);  // bet blockNumber
       const currentBlock = await provider.getBlockNumber();
       const blocksDiff = currentBlock - betBlock;
       addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
