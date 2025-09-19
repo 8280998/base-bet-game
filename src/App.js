@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';  // 新增 useRef
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
 import './App.css'; // Import the CSS for styling
@@ -106,7 +106,7 @@ const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
 const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
 const EXPLORER_URL = "https://basescan.org";
 const COOLDOWN = 1; // seconds
-const BLOCK_WAIT_TIME = 6; // 增加到 6 秒，确保至少 2-3 个块（Base 块时间 ~2s）
+const BLOCK_WAIT_TIME = 4; // 2 blocks
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
 
 const CLAIM_ABI = [
@@ -131,7 +131,7 @@ const App = () => {
   const [contractBalance, setContractBalance] = useState(0);
   const [logs, setLogs] = useState([]);
   const [isBetting, setIsBetting] = useState(false);
-  const stopRequestedRef = useRef(false);  // 新增：用 ref 立即响应停止信号
+  const stopRequestedRef = useRef(false);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
 
@@ -174,7 +174,7 @@ const App = () => {
     const handleAccountsChanged = (accounts) => {
       if (accounts.length > 0) {
         setAccount(accounts[0]);
-        updateBalance();  // 立即更新余额
+        updateBalance();
         updateContractBalance();
       } else {
         setAccount(null);
@@ -330,7 +330,7 @@ const App = () => {
 
       const tx = await claimContract.claim({ gasLimit });
       addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);  // 等待 2 个区块确认
+      const receipt = await tx.wait(2);
       addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
       
       // Force balance update after claim with delay for RPC sync
@@ -379,7 +379,7 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);  // 等待 2 个区块确认，确保状态更新
+        await tx.wait(2);
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
@@ -388,11 +388,10 @@ const App = () => {
     }
   };
 
-  // 新增：异步投注迭代函数
   const betIteration = async (contract, tokenContract, i) => {
     if (stopRequestedRef.current) {
       addLog({type: 'simple', message: 'Betting stopped by user.'});
-      return false;  // 停止循环
+      return false;
     }
 
     const currentGuess = mode === '1' ? guess : '0123456789abcdef'.charAt(Math.floor(Math.random() * 16));
@@ -403,7 +402,7 @@ const App = () => {
     await new Promise(resolve => setTimeout(resolve, COOLDOWN * 1000));
     updateBalance();
     updateContractBalance();
-    return true;  // 继续循环
+    return true;
   };
 
   const placeBet = async (contract, currentGuess, retryCount = 0) => {
@@ -430,13 +429,11 @@ const App = () => {
       addLog({type: 'betPlaced', betId: betId.toString(), blockNumber: receipt.blockNumber});
       return { receipt, txHash: tx.hash, betId: betId.toString() };
     } catch (error) {
-      // 如果是 Insufficient allowance 错误，且是重试，可能是同步延迟，不打印日志，重试
       if (error.message.includes('Insufficient allowance') && retryCount < 1) {
         addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
-        await new Promise(resolve => setTimeout(resolve, 2000));  // 等待 2 秒后重试
+        await new Promise(resolve => setTimeout(resolve, 2000));
         return placeBet(contract, currentGuess, retryCount + 1);
       }
-      // 其他错误或重试次数超限，打印日志
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
       throw error;
     }
@@ -444,7 +441,6 @@ const App = () => {
 
   const resolveBet = async (contract, betId, retryCount = 0) => {
     try {
-      // 新增：检查块确认数
       const bet = await contract.getBet(BigInt(betId));
       const betBlock = Number(bet[6]);  // bet blockNumber
       const currentBlock = await provider.getBlockNumber();
@@ -452,7 +448,7 @@ const App = () => {
       addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
 
       if (blocksDiff < 2) {
-        const waitTime = (2 - blocksDiff) * 4 * 1000;  // 假设 4s/block 缓冲
+        const waitTime = (2 - blocksDiff) * 2 * 1000;
         addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -475,9 +471,8 @@ const App = () => {
       }
       return { bet: resolvedBet, txHash: tx.hash };
     } catch (error) {
-      // 新增：如果是因为块等待，重试
       if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
-        const waitTime = 4000;  // 4 秒重试
+        const waitTime = 2000;
         addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
         return resolveBet(contract, betId, retryCount + 1);
@@ -497,17 +492,15 @@ const App = () => {
       return;
     }
     setIsBetting(true);
-    stopRequestedRef.current = false;  // 重置停止信号
+    stopRequestedRef.current = false;
     try {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
       await approveToken(CONTRACT_ADDRESS, tokenContract);
 
-      // 添加延迟：等待 RPC 状态更新
       await new Promise(resolve => setTimeout(resolve, 3000));
-      addLog({type: 'simple', message: 'Waiting for allowance sync...'});  // 可选日志，显示等待中
+      addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
-      // 可选：重新检查 allowance
       const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (newAllowance < required) {
@@ -516,24 +509,23 @@ const App = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // 异步循环：用 for-await 检查停止
       for (let i = 0; i < numBets; i++) {
         if (stopRequestedRef.current) {
           addLog({type: 'simple', message: 'Betting stopped by user.'});
           break;
         }
-        await betIteration(contract, tokenContract, i);  // 异步迭代，允许中断
+        await betIteration(contract, tokenContract, i);
       }
     } catch (error) {
       addLog({type: 'simple', message: `Betting process error: ${error.message}`});
     } finally {
       setIsBetting(false);
-      stopRequestedRef.current = false;  // 重置 ref
+      stopRequestedRef.current = false;
     }
   };
 
   const stopBetting = () => {
-    stopRequestedRef.current = true;  // 立即设置 ref
+    stopRequestedRef.current = true;
     addLog({type: 'simple', message: "Stopping betting..."});
   };
 
@@ -561,8 +553,7 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)}</p>
-          <p>Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
