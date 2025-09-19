@@ -343,9 +343,6 @@ const App = () => {
       if (error.reason) {
         addLog({type: 'simple', message: `Error reason: ${error.reason}`});
       }
-      if (error.data) {
-        addLog({type: 'simple', message: `Error data: ${error.data}`});
-      }
     }
   };
 
