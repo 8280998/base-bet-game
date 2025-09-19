@@ -106,7 +106,7 @@ const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
 const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
 const EXPLORER_URL = "https://basescan.org";
 const COOLDOWN = 1; // seconds
-const BLOCK_WAIT_TIME = 4; // 4s
+const BLOCK_WAIT_TIME = 3; // 4s
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
 
 const CLAIM_ABI = [
@@ -134,6 +134,7 @@ const App = () => {
   const stopRequestedRef = useRef(false);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
+  const logsContainerRef = useRef(null);
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -197,6 +198,12 @@ const App = () => {
 
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
+
+    setTimeout(() => {
+      if (logsContainerRef.current) {
+        logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+      }
+    }, 0);
   };
 
   const connectWithWallet = async (walletType) => {
@@ -330,7 +337,7 @@ const App = () => {
 
       const tx = await claimContract.claim({ gasLimit });
       addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);
+      const receipt = await tx.wait(2);  // 2 blocks
       addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
       
       // Force balance update after claim with delay for RPC sync
@@ -339,9 +346,12 @@ const App = () => {
         updateContractBalance();
       }, 2000);
     } catch (error) {
-      addLog({type: 'simple', message: `Claim failed`});
+      addLog({type: 'simple', message: `Claim failed: ${error.message}`});
       if (error.reason) {
         addLog({type: 'simple', message: `Error reason: ${error.reason}`});
+      }
+      if (error.data) {
+        addLog({type: 'simple', message: `Error data: ${error.data}`});
       }
     }
   };
@@ -384,6 +394,7 @@ const App = () => {
       throw error;
     }
   };
+
 
   const betIteration = async (contract, tokenContract, i) => {
     if (stopRequestedRef.current) {
@@ -448,7 +459,7 @@ const App = () => {
       addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
 
       if (blocksDiff < 2) {
-        const waitTime = (2 - blocksDiff) * 3 * 1000;
+        const waitTime = (2 - blocksDiff) * 3 * 1000;  //  4s/block
         addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -473,7 +484,7 @@ const App = () => {
     } catch (error) {
 
       if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
-        const waitTime = 2000;
+        const waitTime = 2000;  // 2s
         addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
         return resolveBet(contract, betId, retryCount + 1);
@@ -642,7 +653,7 @@ const App = () => {
 
       <div className="logs-section">
         <h2>Bet Logs</h2>
-        <div className="logs-container">
+        <div className="logs-container" ref={logsContainerRef}>
           {logs.map((log, i) => {
             if (log.type === 'simple') {
               return (
