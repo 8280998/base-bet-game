@@ -346,12 +346,9 @@ const App = () => {
         updateContractBalance();
       }, 2000);
     } catch (error) {
-      addLog({type: 'simple', message: `Claim failed: ${error.message}`});
+      addLog({type: 'simple', message: `Claim failed`});
       if (error.reason) {
         addLog({type: 'simple', message: `Error reason: ${error.reason}`});
-      }
-      if (error.data) {
-        addLog({type: 'simple', message: `Error data: ${error.data}`});
       }
     }
   };
