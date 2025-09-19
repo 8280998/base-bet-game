@@ -106,7 +106,7 @@ const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
 const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
 const EXPLORER_URL = "https://basescan.org";
 const COOLDOWN = 1; // seconds
-const BLOCK_WAIT_TIME = 3; // 4s
+const BLOCK_WAIT_TIME = 4; // 2 blocks
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
 
 const CLAIM_ABI = [
@@ -196,14 +196,15 @@ const App = () => {
     };
   }, [provider, account]);
 
+
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
-
-    setTimeout(() => {
-      if (logsContainerRef.current) {
-        logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
-      }
-    }, 0);
   };
 
   const connectWithWallet = async (walletType) => {
@@ -278,7 +279,7 @@ const App = () => {
 
         if (switchSuccess) {
           // Add a longer delay to allow the wallet to fully update after switch
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 2500));
         }
 
         const updatedNetwork = await newProvider.getNetwork();
@@ -337,7 +338,7 @@ const App = () => {
 
       const tx = await claimContract.claim({ gasLimit });
       addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);  // 2 blocks
+      const receipt = await tx.wait(2);
       addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
       
       // Force balance update after claim with delay for RPC sync
@@ -383,7 +384,7 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);  // 2 blocks
+        await tx.wait(2);
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
@@ -391,7 +392,6 @@ const App = () => {
       throw error;
     }
   };
-
 
   const betIteration = async (contract, tokenContract, i) => {
     if (stopRequestedRef.current) {
@@ -434,13 +434,11 @@ const App = () => {
       addLog({type: 'betPlaced', betId: betId.toString(), blockNumber: receipt.blockNumber});
       return { receipt, txHash: tx.hash, betId: betId.toString() };
     } catch (error) {
-
       if (error.message.includes('Insufficient allowance') && retryCount < 1) {
         addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
         await new Promise(resolve => setTimeout(resolve, 2000));
         return placeBet(contract, currentGuess, retryCount + 1);
       }
-
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
       throw error;
     }
@@ -448,7 +446,6 @@ const App = () => {
 
   const resolveBet = async (contract, betId, retryCount = 0) => {
     try {
-
       const bet = await contract.getBet(BigInt(betId));
       const betBlock = Number(bet[4]);  // bet blockNumber
       const currentBlock = await provider.getBlockNumber();
@@ -456,7 +453,7 @@ const App = () => {
       addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
 
       if (blocksDiff < 2) {
-        const waitTime = (2 - blocksDiff) * 3 * 1000;  //  4s/block
+        const waitTime = (2 - blocksDiff) * 2 * 1000;
         addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -479,9 +476,8 @@ const App = () => {
       }
       return { bet: resolvedBet, txHash: tx.hash };
     } catch (error) {
-
       if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
-        const waitTime = 2000;  // 2s
+        const waitTime = 2000;
         addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
         return resolveBet(contract, betId, retryCount + 1);
@@ -510,15 +506,13 @@ const App = () => {
       await new Promise(resolve => setTimeout(resolve, 3000));
       addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
-
       const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (newAllowance < required) {
         addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
         await approveToken(CONTRACT_ADDRESS, tokenContract);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2500));
       }
-
 
       for (let i = 0; i < numBets; i++) {
         if (stopRequestedRef.current) {
@@ -563,8 +557,7 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)}</p>
-          <p>Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
