@@ -139,7 +139,7 @@ const App = () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        domain: 'basebet.vercel.app',
+        domain: 'basebetgame.vercel.app',
       })
     })
       .then(res => res.json())
