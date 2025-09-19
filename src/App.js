@@ -106,7 +106,7 @@ const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
 const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
 const EXPLORER_URL = "https://basescan.org";
 const COOLDOWN = 1; // seconds
-const BLOCK_WAIT_TIME = 4; // 2 blocks
+const BLOCK_WAIT_TIME = 4; // 4s
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
 
 const CLAIM_ABI = [
@@ -134,7 +134,6 @@ const App = () => {
   const stopRequestedRef = useRef(false);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
-  const logsContainerRef = useRef(null);
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -195,12 +194,6 @@ const App = () => {
       provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
   }, [provider, account]);
-
-  useEffect(() => {
-    if (logsContainerRef.current) {
-      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
-    }
-  }, [logs]);
 
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
@@ -383,7 +376,7 @@ const App = () => {
         const gasLimit = estimatedGas * 120n / 100n;
         const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
         addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);
+        await tx.wait(2);  // 2 blocks
         addLog({type: 'simple', message: `Approval confirmed.`});
       }
     } catch (error) {
@@ -433,11 +426,13 @@ const App = () => {
       addLog({type: 'betPlaced', betId: betId.toString(), blockNumber: receipt.blockNumber});
       return { receipt, txHash: tx.hash, betId: betId.toString() };
     } catch (error) {
+
       if (error.message.includes('Insufficient allowance') && retryCount < 1) {
         addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
         await new Promise(resolve => setTimeout(resolve, 2000));
         return placeBet(contract, currentGuess, retryCount + 1);
       }
+
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
       throw error;
     }
@@ -445,14 +440,15 @@ const App = () => {
 
   const resolveBet = async (contract, betId, retryCount = 0) => {
     try {
+
       const bet = await contract.getBet(BigInt(betId));
-      const betBlock = Number(bet[6]);  // bet blockNumber
+      const betBlock = Number(bet[4]);  // bet blockNumber
       const currentBlock = await provider.getBlockNumber();
       const blocksDiff = currentBlock - betBlock;
       addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
 
       if (blocksDiff < 2) {
-        const waitTime = (2 - blocksDiff) * 2 * 1000;
+        const waitTime = (2 - blocksDiff) * 3 * 1000;
         addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -475,6 +471,7 @@ const App = () => {
       }
       return { bet: resolvedBet, txHash: tx.hash };
     } catch (error) {
+
       if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
         const waitTime = 2000;
         addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
@@ -505,6 +502,7 @@ const App = () => {
       await new Promise(resolve => setTimeout(resolve, 3000));
       addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
+
       const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (newAllowance < required) {
@@ -512,6 +510,7 @@ const App = () => {
         await approveToken(CONTRACT_ADDRESS, tokenContract);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
+
 
       for (let i = 0; i < numBets; i++) {
         if (stopRequestedRef.current) {
@@ -541,7 +540,6 @@ const App = () => {
     <div className="app-container">
       <header className="app-header">
         <h1>Base Betting Game</h1>
-        <p className="subtitle">Bet on the blockchain – Win big or go home!</p>
         <p className="visitor-count">Welcome, you are the {visitorCount}th visitor</p>
       </header>
       <div className="wallet-buttons">
@@ -557,7 +555,8 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)}</p>
+          <p>Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
@@ -643,7 +642,7 @@ const App = () => {
 
       <div className="logs-section">
         <h2>Bet Logs</h2>
-        <div className="logs-container" ref={logsContainerRef}>
+        <div className="logs-container">
           {logs.map((log, i) => {
             if (log.type === 'simple') {
               return (
