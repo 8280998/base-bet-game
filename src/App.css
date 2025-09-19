@@ -1,0 +1,318 @@
+/* src/App.css - Stylish UI with gradients, shadows, and animations */
+
+.app-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Arial', sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: white;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.app-header h1 {
+  font-size: 2.5em;
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* Removed text-shadow and animation for clearer title */
+}
+
+.subtitle {
+  font-size: 1.2em;
+  opacity: 0.9;
+  margin-top: -10px;
+}
+
+.visitor-count {
+  font-size: 1em;
+  opacity: 0.8;
+  margin-top: 5px;
+}
+
+.wallet-buttons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.button-group {
+  display: flex;
+  justify-content: center;
+}
+
+.instructions-btn {
+  background: linear-gradient(to right, #ff6b6b, #4ecdc4);
+  border: none;
+  padding: 12px 24px;
+  color: white;
+  font-size: 1em;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border-top-left-radius: 50px;
+  border-bottom-left-radius: 50px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.claim-btn {
+  background: white;
+  border: none;
+  padding: 12px 24px;
+  color: black;
+  font-size: 1em;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 50px;
+  border-bottom-right-radius: 50px;
+}
+
+.instructions-btn:hover, .claim-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.connect-btn, .start-btn, .stop-btn, .close-btn {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  border: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  color: white;
+  font-size: 1em;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.connect-btn:hover, .start-btn:hover:not(:disabled), .stop-btn:hover:not(:disabled), .close-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.start-btn:disabled, .stop-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.stop-btn {
+  background: linear-gradient(45deg, #ff8e8e, #4ecdc4);
+}
+
+.account-info {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 10px;
+  margin: 10px 0;
+  text-align: center;
+}
+
+.betting-section {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 15px;
+  margin: 20px 0;
+}
+
+.mode-selector, .input-row {
+  margin-bottom: 15px;
+}
+
+.input-row {
+  display: flex;
+  gap: 20px;
+}
+
+.input-group {
+  flex: 1;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+select, .input-field {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 1em;
+}
+
+.input-field::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.guess-selector {
+  margin: 15px 0;
+}
+
+.guess-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.guess-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 10px 15px;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 40px;
+  font-weight: bold;
+}
+
+.guess-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+.guess-btn.active {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+}
+
+.bet-buttons {
+  display: flex;
+  justify-content: space-around;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  position: relative;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 30px;
+  border-radius: 15px;
+  max-width: 500px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h2 {
+  margin-bottom: 20px;
+}
+
+.modal-content p {
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
+.logs-section {
+  margin-top: 30px;
+}
+
+.logs-section h2 {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.logs-container {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  height: 300px;
+  overflow-y: scroll;
+  padding: 15px;
+}
+
+.logs-container p {
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  border-left: 3px solid #4ecdc4;
+  word-break: break-all;
+}
+
+.win-log {
+  color: gold;
+  font-weight: bold;
+  animation: flash 1s infinite;
+}
+
+.lost-log {
+  color: red;
+}
+
+@keyframes flash {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.tx-link {
+  color: #4ecdc4;
+  text-decoration: none;
+  font-weight: bold;
+  margin-left: 5px;
+}
+
+.tx-link:hover {
+  text-decoration: underline;
+}
+
+/* Responsive for mobile */
+@media (max-width: 600px) {
+  .app-container {
+    padding: 10px;
+  }
+
+  .app-header h1 {
+    font-size: 2em;
+  }
+
+  .guess-buttons {
+    gap: 5px;
+  }
+
+  .guess-btn {
+    padding: 8px 12px;
+    min-width: 35px;
+  }
+
+  .bet-buttons {
+    flex-direction: column;
+  }
+
+  .wallet-buttons {
+    flex-direction: column;
+  }
+
+  .button-group {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .input-row {
+    flex-direction: column;
+    gap: 15px;
+  }
+}
