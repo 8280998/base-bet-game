@@ -134,6 +134,7 @@ const App = () => {
   const stopRequestedRef = useRef(false);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
+  const logsContainerRef = useRef(null);
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -194,6 +195,12 @@ const App = () => {
       provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
   }, [provider, account]);
+
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
@@ -636,7 +643,7 @@ const App = () => {
 
       <div className="logs-section">
         <h2>Bet Logs</h2>
-        <div className="logs-container">
+        <div className="logs-container" ref={logsContainerRef}>
           {logs.map((log, i) => {
             if (log.type === 'simple') {
               return (
