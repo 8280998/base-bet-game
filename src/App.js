@@ -106,7 +106,7 @@ const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
 const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
 const EXPLORER_URL = "https://basescan.org";
 const COOLDOWN = 1; // seconds
-const BLOCK_WAIT_TIME = 1; // seconds
+const BLOCK_WAIT_TIME = 4;
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
 
 const CLAIM_ABI = [
@@ -439,26 +439,44 @@ const App = () => {
     }
   };
 
-  const resolveBet = async (contract, betId) => {
+  const resolveBet = async (contract, betId, retryCount = 0) => {
     try {
+      const bet = await contract.getBet(BigInt(betId));
+      const betBlock = Number(bet[6]);  // bet blockNumber
+      const currentBlock = await provider.getBlockNumber();
+      const blocksDiff = currentBlock - betBlock;
+      addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
+
+      if (blocksDiff < 2) {
+        const waitTime = (2 - blocksDiff) * 2 * 1000;
+        addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+
       const estimatedGas = await contract.resolveBet.estimateGas(BigInt(betId));
       const gasLimit = estimatedGas * 120n / 100n;
       const tx = await contract.resolveBet(BigInt(betId), { gasLimit });
       const receipt = await tx.wait();
-      const bet = await contract.getBet(BigInt(betId));
-      const won = bet[4];
-      const reward = ethers.formatEther(bet[5]);
-      const blockNumber = bet[6].toString();
+      const resolvedBet = await contract.getBet(BigInt(betId));
+      const won = resolvedBet[4];
+      const reward = ethers.formatEther(resolvedBet[5]);
+      const blockNumber = resolvedBet[6].toString();
       const block = await provider.getBlock(Number(blockNumber));
-      const targetByte = String.fromCharCode(bet[3]);
+      const targetByte = String.fromCharCode(resolvedBet[3]);
       addLog({type: 'blockInfo', blockNumber, blockHash: block.hash, targetByte});
       if (won) {
         addLog({type: 'result', won: true, reward, txHash: tx.hash, betId});
       } else {
         addLog({type: 'result', won: false, betId});
       }
-      return { bet, txHash: tx.hash };
+      return { bet: resolvedBet, txHash: tx.hash };
     } catch (error) {
+      if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
+        const waitTime = 4000;
+        addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return resolveBet(contract, betId, retryCount + 1);
+      }
       addLog({type: 'simple', message: `Resolve failed: ${error.message}`});
       throw error;
     }
@@ -480,6 +498,7 @@ const App = () => {
       const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
       await approveToken(CONTRACT_ADDRESS, tokenContract);
 
+
       await new Promise(resolve => setTimeout(resolve, 3000));
       addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
@@ -490,7 +509,6 @@ const App = () => {
         await approveToken(CONTRACT_ADDRESS, tokenContract);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
-
       for (let i = 0; i < numBets; i++) {
         if (stopRequestedRef.current) {
           addLog({type: 'simple', message: 'Betting stopped by user.'});
@@ -535,7 +553,7 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)}      Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)}  Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
