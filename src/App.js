@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
-import './App.css'; // Import the CSS for styling
+import { sdk } from '@farcaster/miniapp-sdk';
+import { WagmiProvider, useAccount, useConnect, useBalance, useReadContract, useWriteContract } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { config } from './wagmiConfig';
+import './App.css';
 
 // Set app element for modal accessibility
 Modal.setAppElement('#root');
@@ -119,6 +123,16 @@ const CLAIM_ABI = [
   }
 ];
 
+const queryClient = new QueryClient();
+
+const AppWrapper = () => (
+  <QueryClientProvider client={queryClient}>
+    <WagmiProvider config={config}>
+      <App />
+    </WagmiProvider>
+  </QueryClientProvider>
+);
+
 const App = () => {
   const [betAmount, setBetAmount] = useState(100.0);
   const [numBets, setNumBets] = useState(1);
@@ -135,6 +149,25 @@ const App = () => {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
   const logsContainerRef = useRef(null);
+
+  const { address: wagmiAccount, isConnected: wagmiConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const farcasterConnector = connectors.find(c => c.name === 'Farcaster Mini App');
+
+  const { data: wagmiBalance } = useBalance({
+    address: wagmiAccount,
+    token: TOKEN_ADDRESS,
+    enabled: wagmiConnected,
+  });
+  const { data: wagmiContractBalance } = useReadContract({
+    address: TOKEN_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [CONTRACT_ADDRESS],
+    enabled: wagmiConnected,
+  });
+
+  const { writeContract } = useWriteContract();
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -153,8 +186,13 @@ const App = () => {
     if (account && provider) {
       updateBalance();
       updateContractBalance();
+    } else if (wagmiConnected) {
+      setBalance(wagmiBalance ? ethers.formatEther(wagmiBalance.value) : '0');
+      setContractBalance(wagmiContractBalance ? ethers.formatEther(wagmiContractBalance) : '0');
+      setAccount(wagmiAccount);
     }
-  }, [account, provider]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, provider, wagmiConnected, wagmiAccount, wagmiBalance, wagmiContractBalance]);
 
   useEffect(() => {
     if (!provider) return;
@@ -194,7 +232,8 @@ const App = () => {
       provider.provider.removeListener('chainChanged', handleChainChanged);
       provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
-  }, [provider, account]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   useEffect(() => {
     if (logsContainerRef.current) {
@@ -202,8 +241,29 @@ const App = () => {
     }
   }, [logs]);
 
+  useEffect(() => {
+    const initializeSDK = async () => {
+      try {
+        await sdk.actions.ready();
+        console.log('Farcaster Mini App SDK ready.');
+      } catch (error) {
+        console.error('Error initializing SDK:', error);
+      }
+    };
+    initializeSDK();
+  }, []);
+
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
+  };
+
+  const connectWithFarcaster = async () => {
+    try {
+      connect({ connector: farcasterConnector });
+      addLog({type: 'simple', message: 'Connecting with Farcaster Wallet...'});
+    } catch (error) {
+      addLog({type: 'simple', message: `Farcaster wallet connection failed: ${error.message}`});
+    }
   };
 
   const connectWithWallet = async (walletType) => {
@@ -278,7 +338,7 @@ const App = () => {
 
         if (switchSuccess) {
           // Add a longer delay to allow the wallet to fully update after switch
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 2500));
         }
 
         const updatedNetwork = await newProvider.getNetwork();
@@ -510,7 +570,7 @@ const App = () => {
       if (newAllowance < required) {
         addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
         await approveToken(CONTRACT_ADDRESS, tokenContract);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2500));
       }
 
       for (let i = 0; i < numBets; i++) {
@@ -541,7 +601,6 @@ const App = () => {
     <div className="app-container">
       <header className="app-header">
         <h1>Base Betting Game</h1>
-        <p className="subtitle">Bet on the blockchain – Win big or go home!</p>
         <p className="visitor-count">Welcome, you are the {visitorCount}th visitor</p>
       </header>
       <div className="wallet-buttons">
@@ -554,10 +613,13 @@ const App = () => {
         <button className="connect-btn" onClick={() => connectWithWallet('coinbase')}>
           Connect Coinbase
         </button>
+        <button className="connect-btn" onClick={connectWithFarcaster}>
+          Connect Farcaster Wallet
+        </button>
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)} Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
@@ -712,4 +774,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default AppWrapper;
