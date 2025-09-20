@@ -10,6 +10,12 @@
     "react-modal": "^3.16.1",
     "react-scripts": "5.0.1"
   },
+    "dependencies": {
+    "@farcaster/miniapp-sdk": "^0.1.10",
+    "@farcaster/miniapp-wagmi-connector": "^latest",
+    "wagmi": "^2.12.12",
+    "viem": "^2.21.1"
+  },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build"
