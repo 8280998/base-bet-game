@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
-import { sdk } from '@farcaster/miniapp-sdk';
-import { WagmiProvider, useAccount, useConnect, useBalance, useReadContract, useWriteContract } from 'wagmi';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { config } from './wagmiConfig';
-import './App.css';
+import './App.css'; // Import the CSS for styling
 
 // Set app element for modal accessibility
 Modal.setAppElement('#root');
@@ -123,16 +119,6 @@ const CLAIM_ABI = [
   }
 ];
 
-const queryClient = new QueryClient();
-
-const AppWrapper = () => (
-  <QueryClientProvider client={queryClient}>
-    <WagmiProvider config={config}>
-      <App />
-    </WagmiProvider>
-  </QueryClientProvider>
-);
-
 const App = () => {
   const [betAmount, setBetAmount] = useState(100.0);
   const [numBets, setNumBets] = useState(1);
@@ -149,29 +135,6 @@ const App = () => {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
   const logsContainerRef = useRef(null);
-
-  const { address: wagmiAccount, isConnected: wagmiConnected } = useAccount();
-  const { connect, connectors } = useConnect();
-  const farcasterConnector = connectors.find(c => c.name === 'Farcaster Mini App');
-
-  const { data: wagmiBalance } = useBalance({
-    address: wagmiAccount,
-    token: TOKEN_ADDRESS,
-    enabled: wagmiConnected,
-  });
-  const { data: wagmiContractBalance } = useReadContract({
-    address: TOKEN_ADDRESS,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: [CONTRACT_ADDRESS],
-    enabled: wagmiConnected,
-  });
-
-  const { writeContract } = useWriteContract();
-
-  // Unified connected state
-  const isWalletConnected = !!account || wagmiConnected;
-  const walletAddress = account || wagmiAccount;
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -190,13 +153,8 @@ const App = () => {
     if (account && provider) {
       updateBalance();
       updateContractBalance();
-    } else if (wagmiConnected) {
-      setBalance(wagmiBalance ? ethers.formatEther(wagmiBalance.value) : '0');
-      setContractBalance(wagmiContractBalance ? ethers.formatEther(wagmiContractBalance) : '0');
-      setAccount(wagmiAccount);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, provider, wagmiConnected, wagmiAccount, wagmiBalance, wagmiContractBalance]);
+  }, [account, provider]);
 
   useEffect(() => {
     if (!provider) return;
@@ -236,8 +194,7 @@ const App = () => {
       provider.provider.removeListener('chainChanged', handleChainChanged);
       provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider]);
+  }, [provider, account]);
 
   useEffect(() => {
     if (logsContainerRef.current) {
@@ -245,88 +202,154 @@ const App = () => {
     }
   }, [logs]);
 
-  useEffect(() => {
-    const initializeSDK = async () => {
-      try {
-        await sdk.actions.ready();
-        console.log('Farcaster Mini App SDK ready.');
-      } catch (error) {
-        console.error('Error initializing SDK:', error);
-      }
-    };
-    initializeSDK();
-  }, []);
-
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
   };
 
-  const connectWithFarcaster = async () => {
+  const connectWithWallet = async (walletType) => {
+    let ethereumProvider;
+    let walletName = walletType.charAt(0).toUpperCase() + walletType.slice(1);
+
+    if (walletType === 'metamask') {
+      if (!window.ethereum || !window.ethereum.isMetaMask) {
+        addLog({type: 'simple', message: "MetaMask not detected. Please install or enable it. If multiple wallets are installed, try disabling others temporarily."});
+        return;
+      }
+      ethereumProvider = window.ethereum;
+    } else if (walletType === 'okx') {
+      if (!window.okxwallet) {
+        addLog({type: 'simple', message: "OKX Wallet not detected. Please install or enable it."});
+        return;
+      }
+      ethereumProvider = window.okxwallet;
+    } else if (walletType === 'coinbase') {
+      if (!window.coinbaseWalletExtension) {
+        addLog({type: 'simple', message: "Coinbase Wallet not detected. Please install or enable it."});
+        return;
+      }
+      ethereumProvider = window.coinbaseWalletExtension;
+    } else {
+      addLog({type: 'simple', message: "Unsupported wallet type."});
+      return;
+    }
+
     try {
-      connect({ connector: farcasterConnector });
-      addLog({type: 'simple', message: 'Connecting with Farcaster Wallet...'});
+      const accounts = await ethereumProvider.request({ method: 'eth_requestAccounts' });
+
+      const newProvider = new ethers.BrowserProvider(ethereumProvider);
+      const network = await newProvider.getNetwork();
+
+      if (Number(network.chainId) !== CHAIN_ID) {
+        addLog({type: 'simple', message: `Detected wallet: ${walletName}. Switching to Base...`});
+        let switchSuccess = false;
+        try {
+          await ethereumProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: BASE_CHAIN_ID_HEX }],
+          });
+          switchSuccess = true;
+        } catch (switchError) {
+          if (switchError.code === 4902) {
+            try {
+              await ethereumProvider.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: BASE_CHAIN_ID_HEX,
+                  chainName: 'Base',
+                  rpcUrls: [RPC_URL],
+                  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                  blockExplorerUrls: ['https://basescan.org/'],
+                }],
+              });
+              addLog({type: 'simple', message: `Chain added to ${walletName}. Now switching...`});
+              // After adding, try switching again
+              await ethereumProvider.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: BASE_CHAIN_ID_HEX }],
+              });
+              switchSuccess = true;
+            } catch (addError) {
+              addLog({type: 'simple', message: `Failed to add chain to ${walletName}: ${addError.message}`});
+            }
+          } else {
+            addLog({type: 'simple', message: `Switch failed for ${walletName}: ${switchError.message}`});
+          }
+        }
+
+        if (switchSuccess) {
+          // Add a longer delay to allow the wallet to fully update after switch
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        const updatedNetwork = await newProvider.getNetwork();
+        if (Number(updatedNetwork.chainId) !== CHAIN_ID) {
+          addLog({type: 'simple', message: `Failed to switch to Base in ${walletName}. Please switch manually.`});
+          addLog({type: 'simple', message: "Network details: Chain ID: 8453, RPC: https://mainnet.base.org, Symbol: ETH, Explorer: https://basescan.org"});
+          // Proceed with connection but warn
+          addLog({type: 'simple', message: "Connected anyway. Please switch network manually in wallet to use the app fully."});
+        } else {
+          addLog({type: 'simple', message: "Successfully switched to Base!"});
+        }
+      }
+
+      const newSigner = await newProvider.getSigner();
+      setProvider(newProvider);
+      setSigner(newSigner);
+      setAccount(accounts[0]);
+      addLog({type: 'simple', message: `Connected with ${walletName}: ${accounts[0]}`});
+
+      // Force balance update after state settles
+      setTimeout(() => {
+        if (provider && account) {
+          updateBalance();
+          updateContractBalance();
+        }
+      }, 1000);
     } catch (error) {
-      addLog({type: 'simple', message: `Farcaster wallet connection failed: ${error.message}`});
+      addLog({type: 'simple', message: `Connection failed: ${error.message}`});
     }
   };
 
-  const connectWithWallet = async (walletType) => {
-    // ... unchanged ...
-  };
-
   const claimTokens = async () => {
-    if (!isWalletConnected || !walletAddress) {
+    if (!signer || !account) {
       addLog({type: 'simple', message: "Connect wallet first."});
       return;
     }
     try {
-      if (wagmiConnected) {
-        // Use Wagmi for Farcaster wallet
-        writeContract({
-          address: CLAIM_CONTRACT_ADDRESS,
-          abi: CLAIM_ABI,
-          functionName: 'claim',
-          onSuccess: (hash) => {
-            addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: hash});
-            // Refetch balances after success
-            queryClient.invalidateQueries();
-          },
-          onError: (error) => addLog({type: 'simple', message: `Claim failed: ${error.message}`}),
-        });
-      } else {
-        // Fallback to ethers for external wallets
-        const nativeBalance = await provider.getBalance(account);
-        const nativeBalanceEth = ethers.formatEther(nativeBalance);
-        addLog({type: 'simple', message: `Current native balance: ${nativeBalanceEth} ETH`});
+      const nativeBalance = await provider.getBalance(account);
+      const nativeBalanceEth = ethers.formatEther(nativeBalance);
+      addLog({type: 'simple', message: `Current native balance: ${nativeBalanceEth} ETH`});
 
-        const claimContract = new ethers.Contract(CLAIM_CONTRACT_ADDRESS, CLAIM_ABI, signer);
-        
-        const estimatedGas = await claimContract.claim.estimateGas();
-        const gasLimit = estimatedGas * 120n / 100n;
-        addLog({type: 'simple', message: `Estimated gas: ${estimatedGas}, Using gas limit: ${gasLimit}`});
+      const claimContract = new ethers.Contract(CLAIM_CONTRACT_ADDRESS, CLAIM_ABI, signer);
+      
+      const estimatedGas = await claimContract.claim.estimateGas();
+      const gasLimit = estimatedGas * 120n / 100n;
+      addLog({type: 'simple', message: `Estimated gas: ${estimatedGas}, Using gas limit: ${gasLimit}`});
 
-        const gasPrice = await provider.getFeeData();
-        const estimatedFee = ethers.formatEther(estimatedGas * gasPrice.gasPrice);
-        addLog({type: 'simple', message: `Estimated gas fee: ~${estimatedFee} ETH`});
+      const gasPrice = await provider.getFeeData();
+      const estimatedFee = ethers.formatEther(estimatedGas * gasPrice.gasPrice);
+      addLog({type: 'simple', message: `Estimated gas fee: ~${estimatedFee} ETH`});
 
-        if (parseFloat(nativeBalanceEth) < parseFloat(estimatedFee) * 1.2) {
-          addLog({type: 'simple', message: `Insufficient native balance for gas. Need at least ~${(parseFloat(estimatedFee) * 1.2).toFixed(6)} ETH`});
-          return;
-        }
-
-        const tx = await claimContract.claim({ gasLimit });
-        addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-        const receipt = await tx.wait(2);
-        addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
-        
-        // Force balance update
-        setTimeout(() => {
-          updateBalance();
-          updateContractBalance();
-        }, 2000);
+      if (parseFloat(nativeBalanceEth) < parseFloat(estimatedFee) * 1.2) { // 20% buffer
+        addLog({type: 'simple', message: `Insufficient native balance for gas. Need at least ~${(parseFloat(estimatedFee) * 1.2).toFixed(6)} ETH`});
+        return;
       }
+
+      const tx = await claimContract.claim({ gasLimit });
+      addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
+      const receipt = await tx.wait(2);
+      addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
+      
+      // Force balance update after claim with delay for RPC sync
+      setTimeout(() => {
+        updateBalance();
+        updateContractBalance();
+      }, 2000);
     } catch (error) {
-      addLog({type: 'simple', message: `Claim failed: ${error.message}`});
+      addLog({type: 'simple', message: `Claim failed`});
+      if (error.reason) {
+        addLog({type: 'simple', message: `Error reason: ${error.reason}`});
+      }
     }
   };
 
@@ -464,7 +487,7 @@ const App = () => {
   };
 
   const startBetting = async () => {
-    if (!isWalletConnected || !walletAddress) {
+    if (!signer || !account) {
       addLog({type: 'simple', message: "Connect wallet first."});
       return;
     }
@@ -482,12 +505,12 @@ const App = () => {
       await new Promise(resolve => setTimeout(resolve, 3000));
       addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
-      const newAllowance = await tokenContract.allowance(walletAddress, CONTRACT_ADDRESS);
+      const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (newAllowance < required) {
         addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
         await approveToken(CONTRACT_ADDRESS, tokenContract);
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       for (let i = 0; i < numBets; i++) {
@@ -518,6 +541,7 @@ const App = () => {
     <div className="app-container">
       <header className="app-header">
         <h1>Base Betting Game</h1>
+        <p className="subtitle">Bet on the blockchain – Win big or go home!</p>
         <p className="visitor-count">Welcome, you are the {visitorCount}th visitor</p>
       </header>
       <div className="wallet-buttons">
@@ -530,13 +554,10 @@ const App = () => {
         <button className="connect-btn" onClick={() => connectWithWallet('coinbase')}>
           Connect Coinbase
         </button>
-        <button className="connect-btn" onClick={connectWithFarcaster}>
-          Connect Farcaster Wallet
-        </button>
       </div>
-      {walletAddress && (
+      {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(walletAddress)} Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
@@ -691,4 +712,4 @@ const App = () => {
   );
 };
 
-export default AppWrapper;
+export default App;
