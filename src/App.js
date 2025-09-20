@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
+import { sdk } from '@farcaster/miniapp-sdk';
 import './App.css'; // Import the CSS for styling
 
 // Set app element for modal accessibility
@@ -202,6 +203,18 @@ const App = () => {
       logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
     }
   }, [logs]);
+
+  useEffect(() => {
+    const initializeSDK = async () => {
+      try {
+        await sdk.actions.ready();
+        console.log('Farcaster Mini App SDK ready.');
+      } catch (error) {
+        console.error('Error initializing SDK:', error);
+      }
+    };
+    initializeSDK();
+  }, []);
 
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
