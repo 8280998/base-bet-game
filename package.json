@@ -27,7 +27,8 @@
     }
   },
   "resolutions": {
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "ajv": "^6.12.6"
   },
   "browserslist": {
     "production": [
