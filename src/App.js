@@ -3,6 +3,7 @@ import Modal from 'react-modal';
 import { ethers } from 'ethers';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { WagmiProvider, useAccount, useConnect, useBalance, useReadContract, useWriteContract } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from './wagmiConfig';
 import './App.css';
 
@@ -122,10 +123,14 @@ const CLAIM_ABI = [
   }
 ];
 
+const queryClient = new QueryClient();
+
 const AppWrapper = () => (
-  <WagmiProvider config={config}>
-    <App />
-  </WagmiProvider>
+  <QueryClientProvider client={queryClient}>
+    <WagmiProvider config={config}>
+      <App />
+    </WagmiProvider>
+  </QueryClientProvider>
 );
 
 const App = () => {
@@ -145,11 +150,10 @@ const App = () => {
   const [visitorCount, setVisitorCount] = useState('?');
   const logsContainerRef = useRef(null);
 
-  const { address: wagmiAccount, isConnected: wagmiConnected } = useAccount(); // Wagmi for Farcaster
+  const { address: wagmiAccount, isConnected: wagmiConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const farcasterConnector = connectors.find(c => c.name === 'Farcaster Mini App');
 
-  // Use Wagmi for balance if Wagmi connected, else fallback to ethers
   const { data: wagmiBalance } = useBalance({
     address: wagmiAccount,
     token: TOKEN_ADDRESS,
@@ -187,6 +191,7 @@ const App = () => {
       setContractBalance(wagmiContractBalance ? ethers.formatEther(wagmiContractBalance) : '0');
       setAccount(wagmiAccount);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, provider, wagmiConnected, wagmiAccount, wagmiBalance, wagmiContractBalance]);
 
   useEffect(() => {
@@ -227,7 +232,8 @@ const App = () => {
       provider.provider.removeListener('chainChanged', handleChainChanged);
       provider.provider.removeListener('accountsChanged', handleAccountsChanged);
     };
-  }, [provider, account]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   useEffect(() => {
     if (logsContainerRef.current) {
@@ -691,7 +697,7 @@ const App = () => {
           <button onClick={startBetting} disabled={isBetting} className="start-btn">
             Start Betting
           </button>
-          <button onClick={stopBetting} disabled={isBetting} className="stop-btn">
+          <button onClick={stopBetting} disabled={!isBetting} className="stop-btn">
             Stop Betting
           </button>
         </div>
