@@ -102,6 +102,37 @@ const ERC20_ABI = [
   }
 ];
 
+// Hardcoded values
+const RPC_URL = "https://mainnet.base.org";
+const CHAIN_ID = 8453;
+const CONTRACT_ADDRESS = "0x64f82C34e8F0f023952977E3B74fc5370C425c34";
+const TOKEN_ADDRESS = "0xaF0a8E5465D04Ec8e2F67028dD7BC04903F1E36a";
+const CLAIM_CONTRACT_ADDRESS = "0xc3C033bb090a341330d5b30DAA80B9Deb1F6d120";
+const EXPLORER_URL = "https://basescan.org";
+const COOLDOWN = 1; // seconds
+const BLOCK_WAIT_TIME = 4; // 2 blocks
+const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 in hex
+
+const CLAIM_ABI = [
+  {
+    "inputs": [],
+    "name": "claim",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+];
+
+const queryClient = new QueryClient();
+
+const AppWrapper = () => (
+  <QueryClientProvider client={queryClient}>
+    <WagmiProvider config={config}>
+      <App />
+    </WagmiProvider>
+  </QueryClientProvider>
+);
+
 const App = () => {
   const [betAmount, setBetAmount] = useState(100.0);
   const [numBets, setNumBets] = useState(1);
