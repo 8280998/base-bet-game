@@ -1,0 +1,24 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Base Betting Game",
+    "homeUrl": "https://basebetgame.vercel.app/",
+    "iconUrl": "https://basebetgame.vercel.app/icon.png",
+    "splashImageUrl": "https://basebetgame.vercel.app/logo.png",
+    "splashBackgroundColor": "#FFFFFF",
+    "webhookUrl": "https://basebetgame.vercel.app/webhook",
+    "subtitle": "Bet on Base network",
+    "description": "A fun betting game built on Base for Farcaster users.",
+    "screenshotUrls": [
+      "https://basebetgame.vercel.app/logo.png"
+    ],
+    "primaryCategory": "games",
+    "tags": ["betting", "base", "crypto"],
+    "heroImageUrl": "https://basebetgame.vercel.app/logo.png"
+  }
+}
