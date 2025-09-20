@@ -324,6 +324,40 @@ const App = () => {
     }
   };
 
+  // 新增函数：使用 Farcaster 内置钱包连接
+  const connectWithFarcaster = async () => {
+    try {
+      // 获取 Farcaster 内置的 Ethereum Provider
+      const farcasterProvider = await sdk.wallet.getEthereumProvider();
+      
+      // 使用 ethers 创建 BrowserProvider
+      const newProvider = new ethers.BrowserProvider(farcasterProvider);
+      
+      // 获取 signer 和账户
+      const newSigner = await newProvider.getSigner();
+      const accounts = await newSigner.getAddress();  // 获取用户地址
+      
+      // 检查网络（确保是 Base 链）
+      const network = await newProvider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        addLog({type: 'simple', message: "Farcaster wallet not on Base. Please switch in Warpcast settings."});
+        return;
+      }
+      
+      // 设置 state
+      setProvider(newProvider);
+      setSigner(newSigner);
+      setAccount(accounts);
+      addLog({type: 'simple', message: `Connected with Farcaster Wallet: ${accounts}`});
+      
+      // 更新余额
+      updateBalance();
+      updateContractBalance();
+    } catch (error) {
+      addLog({type: 'simple', message: `Farcaster wallet connection failed: ${error.message}`});
+    }
+  };
+
   const claimTokens = async () => {
     if (!signer || !account) {
       addLog({type: 'simple', message: "Connect wallet first."});
@@ -566,6 +600,9 @@ const App = () => {
         </button>
         <button className="connect-btn" onClick={() => connectWithWallet('coinbase')}>
           Connect Coinbase
+        </button>
+        <button className="connect-btn" onClick={connectWithFarcaster}>
+          Connect Farcaster Wallet
         </button>
       </div>
       {account && (
