@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import Modal from 'react-modal';
 import { ethers } from 'ethers';
 import { sdk } from '@farcaster/miniapp-sdk';
-import './App.css'; // Import the CSS for styling
+import { WagmiProvider, useAccount, useConnect, useBalance, useReadContract, useWriteContract } from 'wagmi';
+import { config } from './wagmiConfig';
+import './App.css';
 
 // Set app element for modal accessibility
 Modal.setAppElement('#root');
@@ -120,6 +122,12 @@ const CLAIM_ABI = [
   }
 ];
 
+const AppWrapper = () => (
+  <WagmiProvider config={config}>
+    <App />
+  </WagmiProvider>
+);
+
 const App = () => {
   const [betAmount, setBetAmount] = useState(100.0);
   const [numBets, setNumBets] = useState(1);
@@ -127,7 +135,6 @@ const App = () => {
   const [guess, setGuess] = useState("0");
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
-  const [account, setAccount] = useState(null);
   const [balance, setBalance] = useState(0);
   const [contractBalance, setContractBalance] = useState(0);
   const [logs, setLogs] = useState([]);
@@ -136,6 +143,30 @@ const App = () => {
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const [visitorCount, setVisitorCount] = useState('?');
   const logsContainerRef = useRef(null);
+
+  const { address: account, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const farcasterConnector = connectors.find(c => c.name === 'Farcaster Mini App');
+
+
+  const { data: userBalanceData } = useBalance({
+    address: account,
+    token: TOKEN_ADDRESS,
+    enabled: !!account,
+  });
+  const userBalanceFormatted = userBalanceData ? ethers.formatEther(userBalanceData.value) : '0';
+
+
+  const { data: contractBalanceData } = useReadContract({
+    address: TOKEN_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [CONTRACT_ADDRESS],
+    enabled: !!account,
+  });
+  const contractBalanceFormatted = contractBalanceData ? ethers.formatEther(contractBalanceData) : '0';
+
+  const { writeContract } = useWriteContract();
 
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
@@ -151,52 +182,9 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (account && provider) {
-      updateBalance();
-      updateContractBalance();
-    }
-  }, [account, provider]);
-
-  useEffect(() => {
-    if (!provider) return;
-
-    const handleChainChanged = async (chainId) => {
-      const newChainId = parseInt(chainId, 16); // Hex to decimal
-      if (newChainId === CHAIN_ID) {
-        addLog({type: 'simple', message: "Network switched to Base."});
-        if (account) {
-          updateBalance();
-          updateContractBalance();
-        }
-      } else {
-        addLog({type: 'simple', message: "Switched to a different network. Please switch back to Base."});
-      }
-    };
-
-    const handleAccountsChanged = (accounts) => {
-      if (accounts.length > 0) {
-        setAccount(accounts[0]);
-        updateBalance();
-        updateContractBalance();
-      } else {
-        setAccount(null);
-        setSigner(null);
-        setProvider(null);
-        setBalance(0);
-        setContractBalance(0);
-        addLog({type: 'simple', message: "Wallet disconnected."});
-      }
-    };
-
-    provider.provider.on('chainChanged', handleChainChanged);
-    provider.provider.on('accountsChanged', handleAccountsChanged);
-
-    return () => {
-      provider.provider.removeListener('chainChanged', handleChainChanged);
-      provider.provider.removeListener('accountsChanged', handleAccountsChanged);
-    };
-  }, [provider, account]);
-
+    setBalance(userBalanceFormatted);
+    setContractBalance(contractBalanceFormatted);
+  }, [userBalanceFormatted, contractBalanceFormatted]);
 
   useEffect(() => {
     if (logsContainerRef.current) {
@@ -218,6 +206,14 @@ const App = () => {
 
   const addLog = (logEntry) => {
     setLogs(prev => [...prev, logEntry]);
+  };
+
+  const connectWithFarcaster = () => {
+    if (farcasterConnector) {
+      connect({ connector: farcasterConnector });
+    } else {
+      addLog({type: 'simple', message: 'Farcaster connector not available.'});
+    }
   };
 
   const connectWithWallet = async (walletType) => {
@@ -324,262 +320,70 @@ const App = () => {
     }
   };
 
-  // 新增函数：使用 Farcaster 内置钱包连接
-  const connectWithFarcaster = async () => {
-    try {
-      // 获取 Farcaster 内置的 Ethereum Provider
-      const farcasterProvider = await sdk.wallet.getEthereumProvider();
-      
-      // 使用 ethers 创建 BrowserProvider
-      const newProvider = new ethers.BrowserProvider(farcasterProvider);
-      
-      // 获取 signer 和账户
-      const newSigner = await newProvider.getSigner();
-      const accounts = await newSigner.getAddress();  // 获取用户地址
-      
-      // 检查网络（确保是 Base 链）
-      const network = await newProvider.getNetwork();
-      if (Number(network.chainId) !== CHAIN_ID) {
-        addLog({type: 'simple', message: "Farcaster wallet not on Base. Please switch in Warpcast settings."});
-        return;
-      }
-      
-      // 设置 state
-      setProvider(newProvider);
-      setSigner(newSigner);
-      setAccount(accounts);
-      addLog({type: 'simple', message: `Connected with Farcaster Wallet: ${accounts}`});
-      
-      // 更新余额
-      updateBalance();
-      updateContractBalance();
-    } catch (error) {
-      addLog({type: 'simple', message: `Farcaster wallet connection failed: ${error.message}`});
-    }
-  };
-
   const claimTokens = async () => {
-    if (!signer || !account) {
+    if (!isConnected || !account) {
       addLog({type: 'simple', message: "Connect wallet first."});
       return;
     }
     try {
-      const nativeBalance = await provider.getBalance(account);
-      const nativeBalanceEth = ethers.formatEther(nativeBalance);
-      addLog({type: 'simple', message: `Current native balance: ${nativeBalanceEth} ETH`});
 
-      const claimContract = new ethers.Contract(CLAIM_CONTRACT_ADDRESS, CLAIM_ABI, signer);
-      
-      const estimatedGas = await claimContract.claim.estimateGas();
-      const gasLimit = estimatedGas * 120n / 100n;
-      addLog({type: 'simple', message: `Estimated gas: ${estimatedGas}, Using gas limit: ${gasLimit}`});
-
-      const gasPrice = await provider.getFeeData();
-      const estimatedFee = ethers.formatEther(estimatedGas * gasPrice.gasPrice);
-      addLog({type: 'simple', message: `Estimated gas fee: ~${estimatedFee} ETH`});
-
-      if (parseFloat(nativeBalanceEth) < parseFloat(estimatedFee) * 1.2) { // 20% buffer
-        addLog({type: 'simple', message: `Insufficient native balance for gas. Need at least ~${(parseFloat(estimatedFee) * 1.2).toFixed(6)} ETH`});
-        return;
-      }
-
-      const tx = await claimContract.claim({ gasLimit });
-      addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);
-      addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
-      
-      // Force balance update after claim with delay for RPC sync
-      setTimeout(() => {
-        updateBalance();
-        updateContractBalance();
-      }, 2000);
+      writeContract({
+        address: CLAIM_CONTRACT_ADDRESS,
+        abi: CLAIM_ABI,
+        functionName: 'claim',
+        onSuccess: (hash) => {
+          addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: hash});
+        },
+        onError: (error) => addLog({type: 'simple', message: `Claim failed: ${error.message}`}),
+      });
     } catch (error) {
-      addLog({type: 'simple', message: `Claim failed`});
-      if (error.reason) {
-        addLog({type: 'simple', message: `Error reason: ${error.reason}`});
-      }
+      addLog({type: 'simple', message: `Claim failed: ${error.message}`});
     }
   };
 
-  const updateBalance = async () => {
-    try {
-      const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, provider);
-      const bal = await tokenContract.balanceOf(account);
-      setBalance(ethers.formatEther(bal));
-    } catch (error) {
-      addLog({type: 'simple', message: `Failed to fetch balance: ${error.message}`});
-    }
-  };
+  const approveToken = async () => {
+    if (!isConnected || !account) return;
 
-  const updateContractBalance = async () => {
     try {
-      const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, provider);
-      const bal = await tokenContract.balanceOf(CONTRACT_ADDRESS);
-      setContractBalance(ethers.formatEther(bal));
-    } catch (error) {
-      addLog({type: 'simple', message: `Failed to fetch contract balance: ${error.message}`});
-    }
-  };
+      const { data: allowance } = await useReadContract({
+        address: TOKEN_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [account, CONTRACT_ADDRESS],
+      });
 
-  const approveToken = async (contractAddr, tokenContract) => {
-    try {
-      const allowance = await tokenContract.allowance(account, contractAddr);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (allowance < required) {
-
-        const estimatedGas = await tokenContract.approve.estimateGas(contractAddr, ethers.MaxUint256);
-        const gasLimit = estimatedGas * 120n / 100n;
-        const tx = await tokenContract.approve(contractAddr, ethers.MaxUint256, { gasLimit });
-        addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: tx.hash});
-        await tx.wait(2);
-        addLog({type: 'simple', message: `Approval confirmed.`});
+        writeContract({
+          address: TOKEN_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [CONTRACT_ADDRESS, ethers.MaxUint256],
+          onSuccess: (hash) => addLog({type: 'tx', message: `Approving tokens... Tx: `, txHash: hash}),
+          onError: (error) => addLog({type: 'simple', message: `Approval failed: ${error.message}`}),
+        });
       }
     } catch (error) {
-      addLog({type: 'simple', message: `Approval failed: ${error.message}`});
-      throw error;
+      addLog({type: 'simple', message: `Approval check failed: ${error.message}`});
     }
   };
 
-  const betIteration = async (contract, tokenContract, i) => {
-    if (stopRequestedRef.current) {
-      addLog({type: 'simple', message: 'Betting stopped by user.'});
-      return false;
-    }
-
-    const currentGuess = mode === '1' ? guess : '0123456789abcdef'.charAt(Math.floor(Math.random() * 16));
-    addLog({type: 'simple', message: `Attempting bet ${i+1}/${numBets} with guess ${currentGuess}`});
-    const { betId } = await placeBet(contract, currentGuess);
-    await new Promise(resolve => setTimeout(resolve, BLOCK_WAIT_TIME * 1000));
-    await resolveBet(contract, betId);
-    await new Promise(resolve => setTimeout(resolve, COOLDOWN * 1000));
-    updateBalance();
-    updateContractBalance();
-    return true;
-  };
-
-  const placeBet = async (contract, currentGuess, retryCount = 0) => {
+  const placeBet = async (currentGuess) => {
     try {
-      const amountWei = ethers.parseEther(betAmount.toString());
+      writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'placeBet',
+        args: [currentGuess, ethers.parseEther(betAmount.toString())],
+        onSuccess: (hash) => addLog({type: 'tx', message: `Placing bet... Tx: `, txHash: hash}),
+        onError: (error) => addLog({type: 'simple', message: `Place bet failed: ${error.message}`}),
+      });
 
-      const estimatedGas = await contract.placeBet.estimateGas(currentGuess, amountWei);
-      const gasLimit = estimatedGas * 120n / 100n;
-      const tx = await contract.placeBet(currentGuess, amountWei, { gasLimit });
-      addLog({type: 'tx', message: `Placing bet with guess ${currentGuess}... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait();
-      const iface = new ethers.Interface(CONTRACT_ABI);
-      let betId = null;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = iface.parseLog(log);
-          if (parsed && parsed.name === 'BetPlaced') {
-            betId = parsed.args.betId;
-            break;
-          }
-        } catch {}
-      }
-      if (!betId) throw new Error('Failed to extract betId');
-      addLog({type: 'betPlaced', betId: betId.toString(), blockNumber: receipt.blockNumber});
-      return { receipt, txHash: tx.hash, betId: betId.toString() };
     } catch (error) {
-      if (error.message.includes('Insufficient allowance') && retryCount < 1) {
-        addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return placeBet(contract, currentGuess, retryCount + 1);
-      }
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
-      throw error;
     }
   };
 
-  const resolveBet = async (contract, betId, retryCount = 0) => {
-    try {
-      const bet = await contract.getBet(BigInt(betId));
-      const betBlock = Number(bet[6]);  // bet blockNumber
-      const currentBlock = await provider.getBlockNumber();
-      const blocksDiff = currentBlock - betBlock;
-      addLog({type: 'simple', message: `Checking blocks: Bet at ${betBlock}, Current ${currentBlock}, Diff: ${blocksDiff}`});
-
-      if (blocksDiff < 2) {
-        const waitTime = (2 - blocksDiff) * 2 * 1000;
-        addLog({type: 'simple', message: `Waiting extra ${waitTime / 1000}s for 2 blocks confirmation...`});
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-
-      const estimatedGas = await contract.resolveBet.estimateGas(BigInt(betId));
-      const gasLimit = estimatedGas * 120n / 100n;
-      const tx = await contract.resolveBet(BigInt(betId), { gasLimit });
-      const receipt = await tx.wait();
-      const resolvedBet = await contract.getBet(BigInt(betId));
-      const won = resolvedBet[4];
-      const reward = ethers.formatEther(resolvedBet[5]);
-      const blockNumber = resolvedBet[6].toString();
-      const block = await provider.getBlock(Number(blockNumber));
-      const targetByte = String.fromCharCode(resolvedBet[3]);
-      addLog({type: 'blockInfo', blockNumber, blockHash: block.hash, targetByte});
-      if (won) {
-        addLog({type: 'result', won: true, reward, txHash: tx.hash, betId});
-      } else {
-        addLog({type: 'result', won: false, betId});
-      }
-      return { bet: resolvedBet, txHash: tx.hash };
-    } catch (error) {
-      if (error.message.includes('Wait for at least 2 blocks') && retryCount < 2) {
-        const waitTime = 2000;
-        addLog({type: 'simple', message: `Block wait required, retrying in ${waitTime / 1000}s...`});
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        return resolveBet(contract, betId, retryCount + 1);
-      }
-      addLog({type: 'simple', message: `Resolve failed: ${error.message}`});
-      throw error;
-    }
-  };
-
-  const startBetting = async () => {
-    if (!signer || !account) {
-      addLog({type: 'simple', message: "Connect wallet first."});
-      return;
-    }
-    if (mode === '1' && !'0123456789abcdef'.includes(guess)) {
-      addLog({type: 'simple', message: "Invalid guess for manual mode."});
-      return;
-    }
-    setIsBetting(true);
-    stopRequestedRef.current = false;
-    try {
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      const tokenContract = new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signer);
-      await approveToken(CONTRACT_ADDRESS, tokenContract);
-
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      addLog({type: 'simple', message: 'Waiting for allowance sync...'});
-
-      const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
-      const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
-      if (newAllowance < required) {
-        addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
-        await approveToken(CONTRACT_ADDRESS, tokenContract);
-        await new Promise(resolve => setTimeout(resolve, 2500));
-      }
-
-      for (let i = 0; i < numBets; i++) {
-        if (stopRequestedRef.current) {
-          addLog({type: 'simple', message: 'Betting stopped by user.'});
-          break;
-        }
-        await betIteration(contract, tokenContract, i);
-      }
-    } catch (error) {
-      addLog({type: 'simple', message: `Betting process error: ${error.message}`});
-    } finally {
-      setIsBetting(false);
-      stopRequestedRef.current = false;
-    }
-  };
-
-  const stopBetting = () => {
-    stopRequestedRef.current = true;
-    addLog({type: 'simple', message: "Stopping betting..."});
-  };
 
   const shortenHash = (hash) => hash ? `${hash.slice(0, 6)}...${hash.slice(-4)}` : '';
 
@@ -607,7 +411,7 @@ const App = () => {
       </div>
       {account && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)  } Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(account)} Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
@@ -762,4 +566,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default AppWrapper;
