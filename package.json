@@ -26,6 +26,9 @@
       "ecmaVersion": 2020
     }
   },
+  "resolutions": {
+    "typescript": "^5.0.4"
+  },
   "browserslist": {
     "production": [
       ">0.2%",
