@@ -4,15 +4,12 @@
   "private": true,
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.1.10",
+    "@farcaster/miniapp-wagmi-connector": "^1.0.0",
     "ethers": "^6.13.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-modal": "^3.16.1",
-    "react-scripts": "5.0.1"
-  },
-    "dependencies": {
-    "@farcaster/miniapp-sdk": "^0.1.10",
-    "@farcaster/miniapp-wagmi-connector": "^1.0.0",
+    "react-scripts": "5.0.1",
     "wagmi": "^2.12.12",
     "viem": "^2.21.1"
   },
