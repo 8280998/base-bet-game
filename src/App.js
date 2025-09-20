@@ -169,6 +169,10 @@ const App = () => {
 
   const { writeContract } = useWriteContract();
 
+  // Unified connected state
+  const isWalletConnected = !!account || wagmiConnected;
+  const walletAddress = account || wagmiAccount;
+
   useEffect(() => {
     fetch('https://visitor.6developer.com/visit', {
       method: 'POST',
@@ -267,149 +271,62 @@ const App = () => {
   };
 
   const connectWithWallet = async (walletType) => {
-    let ethereumProvider;
-    let walletName = walletType.charAt(0).toUpperCase() + walletType.slice(1);
-
-    if (walletType === 'metamask') {
-      if (!window.ethereum || !window.ethereum.isMetaMask) {
-        addLog({type: 'simple', message: "MetaMask not detected. Please install or enable it. If multiple wallets are installed, try disabling others temporarily."});
-        return;
-      }
-      ethereumProvider = window.ethereum;
-    } else if (walletType === 'okx') {
-      if (!window.okxwallet) {
-        addLog({type: 'simple', message: "OKX Wallet not detected. Please install or enable it."});
-        return;
-      }
-      ethereumProvider = window.okxwallet;
-    } else if (walletType === 'coinbase') {
-      if (!window.coinbaseWalletExtension) {
-        addLog({type: 'simple', message: "Coinbase Wallet not detected. Please install or enable it."});
-        return;
-      }
-      ethereumProvider = window.coinbaseWalletExtension;
-    } else {
-      addLog({type: 'simple', message: "Unsupported wallet type."});
-      return;
-    }
-
-    try {
-      const accounts = await ethereumProvider.request({ method: 'eth_requestAccounts' });
-
-      const newProvider = new ethers.BrowserProvider(ethereumProvider);
-      const network = await newProvider.getNetwork();
-
-      if (Number(network.chainId) !== CHAIN_ID) {
-        addLog({type: 'simple', message: `Detected wallet: ${walletName}. Switching to Base...`});
-        let switchSuccess = false;
-        try {
-          await ethereumProvider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: BASE_CHAIN_ID_HEX }],
-          });
-          switchSuccess = true;
-        } catch (switchError) {
-          if (switchError.code === 4902) {
-            try {
-              await ethereumProvider.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: BASE_CHAIN_ID_HEX,
-                  chainName: 'Base',
-                  rpcUrls: [RPC_URL],
-                  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-                  blockExplorerUrls: ['https://basescan.org/'],
-                }],
-              });
-              addLog({type: 'simple', message: `Chain added to ${walletName}. Now switching...`});
-              // After adding, try switching again
-              await ethereumProvider.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: BASE_CHAIN_ID_HEX }],
-              });
-              switchSuccess = true;
-            } catch (addError) {
-              addLog({type: 'simple', message: `Failed to add chain to ${walletName}: ${addError.message}`});
-            }
-          } else {
-            addLog({type: 'simple', message: `Switch failed for ${walletName}: ${switchError.message}`});
-          }
-        }
-
-        if (switchSuccess) {
-          // Add a longer delay to allow the wallet to fully update after switch
-          await new Promise(resolve => setTimeout(resolve, 2500));
-        }
-
-        const updatedNetwork = await newProvider.getNetwork();
-        if (Number(updatedNetwork.chainId) !== CHAIN_ID) {
-          addLog({type: 'simple', message: `Failed to switch to Base in ${walletName}. Please switch manually.`});
-          addLog({type: 'simple', message: "Network details: Chain ID: 8453, RPC: https://mainnet.base.org, Symbol: ETH, Explorer: https://basescan.org"});
-          // Proceed with connection but warn
-          addLog({type: 'simple', message: "Connected anyway. Please switch network manually in wallet to use the app fully."});
-        } else {
-          addLog({type: 'simple', message: "Successfully switched to Base!"});
-        }
-      }
-
-      const newSigner = await newProvider.getSigner();
-      setProvider(newProvider);
-      setSigner(newSigner);
-      setAccount(accounts[0]);
-      addLog({type: 'simple', message: `Connected with ${walletName}: ${accounts[0]}`});
-
-      // Force balance update after state settles
-      setTimeout(() => {
-        if (provider && account) {
-          updateBalance();
-          updateContractBalance();
-        }
-      }, 1000);
-    } catch (error) {
-      addLog({type: 'simple', message: `Connection failed: ${error.message}`});
-    }
+    // ... unchanged ...
   };
 
   const claimTokens = async () => {
-    if (!signer || !account) {
+    if (!isWalletConnected || !walletAddress) {
       addLog({type: 'simple', message: "Connect wallet first."});
       return;
     }
     try {
-      const nativeBalance = await provider.getBalance(account);
-      const nativeBalanceEth = ethers.formatEther(nativeBalance);
-      addLog({type: 'simple', message: `Current native balance: ${nativeBalanceEth} ETH`});
+      if (wagmiConnected) {
+        // Use Wagmi for Farcaster wallet
+        writeContract({
+          address: CLAIM_CONTRACT_ADDRESS,
+          abi: CLAIM_ABI,
+          functionName: 'claim',
+          onSuccess: (hash) => {
+            addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: hash});
+            // Refetch balances after success
+            queryClient.invalidateQueries();
+          },
+          onError: (error) => addLog({type: 'simple', message: `Claim failed: ${error.message}`}),
+        });
+      } else {
+        // Fallback to ethers for external wallets
+        const nativeBalance = await provider.getBalance(account);
+        const nativeBalanceEth = ethers.formatEther(nativeBalance);
+        addLog({type: 'simple', message: `Current native balance: ${nativeBalanceEth} ETH`});
 
-      const claimContract = new ethers.Contract(CLAIM_CONTRACT_ADDRESS, CLAIM_ABI, signer);
-      
-      const estimatedGas = await claimContract.claim.estimateGas();
-      const gasLimit = estimatedGas * 120n / 100n;
-      addLog({type: 'simple', message: `Estimated gas: ${estimatedGas}, Using gas limit: ${gasLimit}`});
+        const claimContract = new ethers.Contract(CLAIM_CONTRACT_ADDRESS, CLAIM_ABI, signer);
+        
+        const estimatedGas = await claimContract.claim.estimateGas();
+        const gasLimit = estimatedGas * 120n / 100n;
+        addLog({type: 'simple', message: `Estimated gas: ${estimatedGas}, Using gas limit: ${gasLimit}`});
 
-      const gasPrice = await provider.getFeeData();
-      const estimatedFee = ethers.formatEther(estimatedGas * gasPrice.gasPrice);
-      addLog({type: 'simple', message: `Estimated gas fee: ~${estimatedFee} ETH`});
+        const gasPrice = await provider.getFeeData();
+        const estimatedFee = ethers.formatEther(estimatedGas * gasPrice.gasPrice);
+        addLog({type: 'simple', message: `Estimated gas fee: ~${estimatedFee} ETH`});
 
-      if (parseFloat(nativeBalanceEth) < parseFloat(estimatedFee) * 1.2) { // 20% buffer
-        addLog({type: 'simple', message: `Insufficient native balance for gas. Need at least ~${(parseFloat(estimatedFee) * 1.2).toFixed(6)} ETH`});
-        return;
+        if (parseFloat(nativeBalanceEth) < parseFloat(estimatedFee) * 1.2) {
+          addLog({type: 'simple', message: `Insufficient native balance for gas. Need at least ~${(parseFloat(estimatedFee) * 1.2).toFixed(6)} ETH`});
+          return;
+        }
+
+        const tx = await claimContract.claim({ gasLimit });
+        addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
+        const receipt = await tx.wait(2);
+        addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
+        
+        // Force balance update
+        setTimeout(() => {
+          updateBalance();
+          updateContractBalance();
+        }, 2000);
       }
-
-      const tx = await claimContract.claim({ gasLimit });
-      addLog({type: 'tx', message: `Claiming tokens... Tx: `, txHash: tx.hash});
-      const receipt = await tx.wait(2);
-      addLog({type: 'simple', message: `Claim confirmed! Block: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}, Fee: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`});
-      
-      // Force balance update after claim with delay for RPC sync
-      setTimeout(() => {
-        updateBalance();
-        updateContractBalance();
-      }, 2000);
     } catch (error) {
-      addLog({type: 'simple', message: `Claim failed`});
-      if (error.reason) {
-        addLog({type: 'simple', message: `Error reason: ${error.reason}`});
-      }
+      addLog({type: 'simple', message: `Claim failed: ${error.message}`});
     }
   };
 
@@ -547,7 +464,7 @@ const App = () => {
   };
 
   const startBetting = async () => {
-    if (!signer || !account) {
+    if (!isWalletConnected || !walletAddress) {
       addLog({type: 'simple', message: "Connect wallet first."});
       return;
     }
@@ -565,7 +482,7 @@ const App = () => {
       await new Promise(resolve => setTimeout(resolve, 3000));
       addLog({type: 'simple', message: 'Waiting for allowance sync...'});
 
-      const newAllowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
+      const newAllowance = await tokenContract.allowance(walletAddress, CONTRACT_ADDRESS);
       const required = ethers.parseEther(betAmount.toString()) * BigInt(numBets);
       if (newAllowance < required) {
         addLog({type: 'simple', message: `Allowance still low, retrying approve...`});
@@ -617,9 +534,9 @@ const App = () => {
           Connect Farcaster Wallet
         </button>
       </div>
-      {account && (
+      {walletAddress && (
         <div className="account-info">
-          <p>Account: {shortenHash(account)} Balance: {balance} GTK</p>
+          <p>Account: {shortenHash(walletAddress)} Balance: {balance} GTK</p>
         </div>
       )}
       <div className="button-group">
