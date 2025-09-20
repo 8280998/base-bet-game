@@ -4,6 +4,9 @@
     "payload": "eyJkb21haW4iOiJiYXNlYmV0Z2FtZS52ZXJjZWwuYXBwIn0",
     "signature": "MHg4MWE4Zjg5ODJkY2FmYzg3M2Q4ZDM2ZWQ0NThjMGYyMWU3N2JkYzRiNzNjMTBhZjM1MTVmN2JkZGNmMTM5YmI0MjFiYTM0NTgxNjZhM2MxMTJhZWY2MDZiMjU5NGY2ODdkM2UyNzgwMjk1ZjMxZTBiMjZkZGUzMGFkMDkxNjAzYzFj"
   },
+  "baseBuilder": {
+    "allowedAddresses": ["0x978B47167765833499d5b69852abaAD75a4852C0"]
+  },
   "miniapp": {
     "version": "1",
     "name": "Base Betting Game",
