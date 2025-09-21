@@ -495,7 +495,7 @@ const App = () => {
     } catch (error) {
       if (error.message.includes('Insufficient allowance') && retryCount < 1) {
         addLog({type: 'simple', message: `Allowance sync delay detected, retrying bet...`});
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         return placeBet(contract, currentGuess, retryCount + 1);
       }
       addLog({type: 'simple', message: `Place bet failed: ${error.message}`});
