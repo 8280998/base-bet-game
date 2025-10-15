@@ -613,9 +613,6 @@ const App = () => {
         <button className="connect-btn" onClick={() => connectWithWallet('coinbase')}>
           Connect Coinbase
         </button>
-        <button className="connect-btn" onClick={connectWithFarcaster}>
-          Connect Farcaster Wallet
-        </button>
       </div>
       {account && (
         <div className="account-info">
